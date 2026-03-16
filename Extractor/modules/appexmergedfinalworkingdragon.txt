@@ -1,0 +1,807 @@
+import os, requests, json, threading, asyncio, logging, cloudscraper, aiohttp
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad, pad
+from base64 import b64decode, b64encode
+from requests_toolbelt.multipart.encoder import MultipartEncoder
+from pyrogram.errors import ListenerTimeout
+from config import PREMIUM_LOGS
+from concurrent.futures import ThreadPoolExecutor
+from pyrogram import filters
+from Extractor import app
+
+scraper = cloudscraper.create_scraper()
+THREADPOOL = ThreadPoolExecutor(max_workers=1000)
+ext_logs = PREMIUM_LOGS
+
+import base64
+from datetime import datetime
+import pytz
+
+def my_encrypt_data(token: str) -> str:
+    try:
+        return base64.urlsafe_b64encode(token.encode()).decode().rstrip("=")
+    except Exception:
+        return ""
+
+def get_current_time_ist():
+    return datetime.now(pytz.timezone("Asia/Kolkata")).strftime("%d-%m-%Y %I:%M %p")
+
+def decrypt_data(encoded_data):
+    try:
+        key = b"638udh3829162018"
+        iv = b"fedcba9876543210"
+        decoded_data = b64decode(encoded_data)
+        cipher = AES.new(key, AES.MODE_CBC, iv)
+        return unpad(cipher.decrypt(decoded_data), AES.block_size).decode("utf-8")
+    except Exception:
+        return ""
+
+# ✅ NEW: Build Drago-compatible URL
+import base64
+
+def build_drago_url(real_url: str, auth_token: str) -> str:
+    try:
+        # 1️⃣ real API URL → hex
+        url_hex = real_url.encode("utf-8").hex()
+
+        token = auth_token.strip()
+
+        # 2️⃣ JWT fix (remove leading 'e' from 'eyJ')
+        if token.startswith("eyJ"):
+            token = token[1:]   # eyJ → yJ
+
+        # 3️⃣ EXACT payload Drago expects
+        payload = "DragoRexoe" + token
+
+        # 4️⃣ payload → hex
+        payload_hex = payload.encode("utf-8").hex()
+
+        return f"https://dragoapi.vercel.app/{url_hex}{payload_hex}.mkv"
+
+    except Exception:
+        return ""
+
+def build_drago_pdf_url(real_pdf_url: str, auth_token: str) -> str:
+    try:
+        url_hex = real_pdf_url.encode("utf-8").hex()
+
+        token = auth_token.strip()
+        if token.startswith("eyJ"):
+            token = token[1:]
+
+        payload = "DragoRexoe" + token
+        payload_hex = payload.encode("utf-8").hex()
+
+        return f"https://dragoapi.vercel.app/{url_hex}{payload_hex}.pdf"
+    except Exception:
+        return ""
+
+
+
+
+    
+async def Appx_Merged_Login(bot, UserId, api):
+    cred_text = (
+        "<blockquote><b>Choose a Login Type & Send Your Credentials in Given Format :</b></blockquote>\n\n"
+        "<b>1️⃣ For OTP Login :</b> <i>Send Mobile no. / Email-id</i>\n"
+        "<b>2️⃣ For Password Login :</b> <i>Send ID*Password</i>\n"
+        "<b>3️⃣ For Token Login :</b> <i>Send Authorization Token Directly</i>")
+
+    Editable = await bot.send_message(UserId, cred_text)
+    try:
+        input1 = await bot.ask(
+            UserId,
+            "✍️ Login details bhejo (id*pass / mobile / token):",
+            timeout=60
+        )
+        log_info = input1.text.strip()
+        await input1.delete()
+
+        if "*" in log_info:
+            email, password = log_info.split("*")
+            m = MultipartEncoder(fields={"source": "website", "email": email, "password": password, "extra_details": "1"}, boundary='----geckoformboundary96d86cf985aee598ec2974e07a8476d4')
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0", "Accept": "*/*", "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "gzip, deflate, br, zstd", "Content-Type": m.content_type, "Client-Service": "Appx", "Auth-Key": "appxapi", "source": "website", "Priority": "u=0", "Connection": "keep-alive", "TE": "trailers", "Pragma": "no-cache", "Cache-Control": "no-cache"}
+
+            response = requests.post(f"{api}/post/userLogin", data=m, headers=headers).json()
+            if response['status'] != 200:
+                return await Editable.edit(f"❌ <b>Authentication Failed :</b>  <i>{response['message']}</i>")
+            userid = response["data"]["userid"] if response["data"]["userid"] else "98566"
+            token = response["data"]["token"]
+
+        elif "*" not in log_info and ((log_info.isdigit() and len(log_info) == 10) or '@gmail.com' in log_info):
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0", "Accept": "*/*", "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "gzip, deflate, br, zstd", "Client-Service": "Appx", "Auth-Key": "appxapi", "source": "website", "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "cross-site", "Device-Type": "", "Connection": "keep-alive", "Priority": "u=0", "TE": "trailers"}
+            otp_resp =  requests.get(f"{api}/get/sendotp?phone={log_info}", headers=headers).json()
+            if otp_resp['status'] != 200:
+                return await Editable.edit(f"⚠️ <b>OTP Validation Failed :</b>  <i>{otp_resp}</i>")
+
+            sent_msg = otp_resp.get('message', 'OTP sent successfully')
+            otp_msg = await bot.send_message(UserId, f"{sent_msg}")
+            otp_input = await bot.ask(
+                UserId,
+                "🔐 OTP bhejo:",
+                timeout=60
+            )
+            otp = otp_input.text
+            await otp_msg.delete()
+            await otp_input.delete()
+
+            otp_verify = requests.get(f"{api}/get/otpverify?useremail={log_info}&otp={otp}&device_id=WebBrowser174142417398734b26e1k1kt&mydeviceid=&mydeviceid2=", headers=headers).json()
+            userid = otp_verify["user"]["userid"] if otp_verify["user"]["userid"] else "98566"
+            token = otp_verify["user"]["token"]
+
+        elif log_info.startswith("eyJ") or "|" in log_info:
+            if "|" in log_info:
+                userid, token = log_info.split("|")
+            else:
+                token = log_info
+                try:
+                    parts = token.split('.')
+                    if len(parts) < 2:
+                        raise ValueError("Invlid Token Format !")
+
+                    data = parts[1]
+                    missing_padding = len(data) % 4
+                    if missing_padding:
+                       data += '=' * (4 - missing_padding)
+                    data1 = json.loads(b64decode(data).decode('utf-8'))
+                    userid = data1['id']
+                except (ValueError, json.JSONDecodeError, KeyError, IndexError) as e:
+                    return await Editable.edit(f"❌ <b>Authentication Failed :</b>  <i>{e}</i>")
+        else:
+            return await Editable.edit("⚠️ You Entered Invalid Data !!") 
+        try:
+            await Editable.delete()
+        except:
+            pass
+        return token, userid, log_info
+    except ListenerTimeout:
+        return await Editable.edit(f"⏰ TimeOut! You didn't respond in 60 seconds. Please try again by clicking the button again...")
+
+async def AppxMerged(bot, UserId, api, app_name):
+    token, userid, log_info = await Appx_Merged_Login(bot, UserId, api)
+   # headers1 = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0", "Accept": "*/*", "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "gzip, deflate, br, zstd", "Host": api.replace('https://', ''), "Client-Service": "Appx", "Auth-Key": "appxapi", "source": "website", "User-ID": userid, "Device-Type":"", "Authorization": token, "Connection": "keep-alive", "TE": "trailers"}
+    headers1 = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "*/*",
+        "Client-Service": "Appx",
+        "Auth-Key": "appxapi",
+        "source": "website",
+        "User-ID": userid,
+        "Authorization": token,
+    }
+
+
+    course_text = (
+        f"<blockquote><b>📱 App Name: {app_name}</b> \n"
+        f"<b>🔗 API :</b> {api} </blockquote>\n\n"
+        f"<b>✅ Logged in Successfully 🧑‍💻 with 🔑 Credential :</b>\n"
+        f"<code><pre>{log_info}</pre></code>\n"
+        f"<b>👤 UserId | Token</b>\n"
+        f"<code><pre>{userid}|{token}</pre></code>\n\n"
+        f"<b>📃 <u>List of Batches You Have</u> :</b>\n")
+
+    names = ''  
+    course_file_text = (
+        f"<blockquote><b>📱 App Name: {app_name}</b> \n"
+        f"<b>🔗 API :</b> {api} </blockquote>\n\n"
+        f"<b>✅ Logged in Successfully 🧑‍💻 with 🔑 Credential :</b>\n"
+        f"<code><pre>{log_info}</pre></code>\n"
+        f"<b>👤 UserId | Token</b>\n"
+        f"<code><pre>{userid}|{token}</pre></code>\n\n")
+
+    for attempt in range(1, 4):
+        try:
+        #    Response1 = requests.get(f"{api}/get/mycourseweb?userid={userid}", headers=headers1, timeout=7)
+            Response1 = requests.get(
+                f"{api}/get/mycoursev2?userid={userid}",
+                headers=headers1,
+                timeout=7
+            )
+
+            if Response1.status_code == 429:
+                raise ValueError(f"{Response1.status_code} : Too Many Requests !!")
+            elif Response1.status_code != 200:
+                raise ValueError(f"{Response1.status_code} : {Response1.text} !!")
+            Courses1 = Response1.json().get('data', [])
+            if Courses1:
+                for course in Courses1:
+                    course_text += f"<blockquote expandable><b>📚 ID :</b> `{course['id']}`\n<b>📖 Batch Name :</b> {course['course_name']}\n<b>💸 Price :</b> {course['price']}₹\n<b>🖼️ Thumbnail :</b> [Thumbnail]({course['course_thumbnail']})</blockquote>\n"
+                    names += f"{course['id']}.   {course['course_name']}    💸 {course['price']}₹\n"
+
+                if len(course_text) > 4000:
+                    with open(f"{app_name}_batches.txt", "w", encoding="utf-8") as f:
+                        f.write(names)
+                    await bot.send_document(UserId, f"{app_name}_batches.txt", caption=course_file_text, thumb='Extractor/thumbs/txt-5.jpg')
+                    await bot.send_document(ext_logs, f"{app_name}_batches.txt", caption=course_file_text, thumb='Extractor/thumbs/txt-5.jpg')
+                    os.remove(f"{app_name}_batches.txt")
+                else:
+                    await bot.send_message(UserId, f"{course_text}", disable_web_page_preview=True)
+                    await bot.send_message(ext_logs, f"{course_text}", disable_web_page_preview=True)
+                break
+
+            else:
+                Response2 = requests.get(f"{api}/get/get_all_purchases?userid={userid}&item_type=10", headers=headers1, timeout=7)
+                if Response2.status_code == 429:
+                    raise ValueError(f"{Response2.status_code} : Too Many Requests !!")
+                elif Response2.status_code != 200:
+                    raise ValueError(f"{Response2.status_code} : {Response2.text} !!")
+                Courses2 = Response2.json().get('data', [])
+                if Courses2:
+                    for course in Courses2:
+                        c_data = course['coursedt']
+                        for data in c_data:
+                            price = data['price'] if data['price'] else "N/A"
+                            course_text += f"<blockquote expandable><b>📚 ID :</b> `{data['id']}`\n<b>📖 Batch Name :</b> {data['course_name']}\n<b>💸 Batch Price :</b> {price}₹\n<b>⌛ Batch Expiry :</b> {data['expiryDate']}\n<b>🖼️ Thumbnail :</b> [Thumbnail]({data['course_thumbnail']})</blockquote>\n"
+                            names += f"{data['id']}.   {data['course_name']}    💸 {price}₹\n"
+
+                    if len(course_text) > 4000:
+                        ListFile = app_name + "_batches.txt"
+                        with open(ListFile, "w", encoding="utf-8") as f:
+                            f.write(names)
+                        await bot.send_document(UserId, ListFile, file_name=f"{app_name}_batches.txt", caption=course_file_text, thumb='Extractor/thumbs/txt-5.jpg')
+                        await bot.send_document(ext_logs, ListFile, file_name=f"{app_name}_batches.txt", caption=course_file_text, thumb='Extractor/thumbs/txt-5.jpg')
+                        os.remove(ListFile)
+                    else:
+                        await bot.send_message(UserId, f"{course_text}", disable_web_page_preview=True)
+                        await bot.send_message(ext_logs, f"{course_text}", disable_web_page_preview=True)
+                    break
+                else:
+                    raise ValueError("No Any Batch Found in Provided Details !!")
+        except Exception as e:
+            if attempt < 3:
+                print(F"⚠️ Appx Batches not Found : {e}.")
+                await asyncio.sleep(2)
+            else:
+                return await bot.send_message(UserId, f"❌ <b>Fetching Courses Failed :</b>  <i>{e}</i>")
+
+    if Courses1:
+        Editable1 = await bot.send_message(UserId, "<blockquote> <b>📥 SEND THE BATCH ID(s) 🪪 TO DOWNLOAD</b></blockquote>\n\n**🔢 TO DOWNLOAD MULTIPLE BATCHES :**\n➖ Separate each batch ID with a comma (,)\n • 💡 <b>Example :</b> 2254, 1344")
+        input1 = await bot.ask(
+            UserId,
+            "📥 Batch ID(s) bhejo (comma separated):",
+            timeout=60
+        )
+        BatchIds = [bid.strip() for bid in input1.text.split(",") if bid.strip()]
+        await input1.delete()
+        THREADPOOL.submit(asyncio.run, appex_downV3(bot, UserId, headers1, api, app_name, BatchIds, Courses1, Editable1))
+
+    if Courses2:
+        Editable1 = await bot.send_message(UserId, "<blockquote> <b>📥 SEND THE BATCH ID(s) 🪪 TO DOWNLOAD</b></blockquote>\n\n**🔢 TO DOWNLOAD MULTIPLE BATCHES :**\n➖ Separate each batch ID with a comma (,)\n • 💡 <b>Example :</b> 2254, 1344")
+        input1 = await bot.ask(
+            UserId,
+            "📥 Batch ID(s) bhejo (comma separated):",
+            timeout=60
+        )
+        BatchIds = [bid.strip() for bid in input1.text.split(",") if bid.strip()]
+        await input1.delete()
+        THREADPOOL.submit(asyncio.run, AppxV2_CourseContent(bot, api, UserId, BatchIds, Courses2, app_name, headers1, Editable1))
+
+    if not Courses1 and not Courses2:
+        return await bot.send_message(UserId, "⚠️ No Course found in Given Data !!")
+
+async def appex_downV3(bot, UserId, headers1, api, app_name, BatchIds, courses, Editable):    
+    BatchId = BatchName = BatchThumb = BatchPrice = BatchExp = None
+    for idx, BatchId in enumerate(BatchIds, 1):
+        for data in courses:
+            if BatchId == data['id']:
+                BatchName = data['course_name']
+                BatchThumb = data['course_thumbnail'] if data['course_thumbnail'] else "N/A"
+                BatchPrice = data['price'] if data['price'] else "N/A"
+                BatchExp = data['end_date'] if data['end_date'] else "N/A"
+                break
+        if not BatchName:
+            return await Editable.edit(f"<b>🔴 You Entered the Invalid Batch ID</b>!!!")
+
+        await Editable.edit(f"<blockquote><b>📤 Extracting Batch :</b> <i>{BatchName}</i></blockquote>")
+        PinnedMsg = await bot.pin_chat_message(UserId, Editable.id, both_sides=True)
+        if PinnedMsg: await bot.delete_messages(UserId, PinnedMsg.id)
+        emoji = await bot.send_message(UserId, "👨‍💻") 
+
+        try:
+            result = await get_urls_V3(api,  BatchId, BatchName, headers1, Editable)
+
+            FileName = BatchName.replace("/", " ").replace("|", "").replace("_", " ") + ".txt"
+            FileTemp = str(UserId) + BatchName.replace("/", " ").replace("|", "").replace("_", " ") + ".txt"
+            with open(FileTemp, 'w', encoding='utf-8') as f:
+                f.write(result.rstrip("\n"))
+
+            total_urls = result.count("https://")
+            reg_mp4_count = sum(1 for line in result.splitlines() if ".mp4" in line.strip())
+            reg_m3u8_count = sum(1 for line in result.splitlines() if ".m3u8" in line.strip())
+            yt_count = result.count("https://youtu.be/  ")
+            total_reg = reg_mp4_count + reg_m3u8_count 
+            total_enc = result.count(".mkv")
+            total_zip = result.count(".zip")
+            total_vid = total_zip + total_enc + total_reg + yt_count + result.count("/appx/v3/")
+            reg_pdf = sum(1 for line in result.splitlines() if ".pdf" in line.strip() and "*" not in line.strip())
+            enc_pdf = sum(1 for line in result.splitlines() if ".pdf" in line.strip() and "*" in line.strip())
+            total_pdf = result.count(".pdf")
+
+            user = await bot.get_users(UserId)
+            File_captions = (
+                        f"<blockquote><b>📱 App Name: {app_name} (V3)</b>\n"
+                        f"<b>🔗 API :</b> {api} </blockquote>\n\n"
+                        f"<b>======= BATCH DETAILS =======</b>\n"
+                        f"<blockquote expandable>🪪 <b>Batch ID :</b> {BatchId}\n"
+                        f"🌟 <b>Batch Name :</b> {BatchName}\n"
+                        f"💸 <b>Batch Price :</b> {BatchPrice}₹\n"
+                        f"⌛ <b>Expiry Date :</b> {BatchExp}\n"
+                        f"🖼️ <b>Batch Thumbnail :</b> [Thumbnail]({BatchThumb})</blockquote>\n\n"
+                        f"<b>======= LINK SUMMARY =======</b>\n"
+                        f"<blockquote expandable>🔢 <b>Total Number of Links :</b> {total_urls}\n"
+                        f"┠🎥 <b>Total Videos :</b> {total_vid}\n"
+                        f"  ┠📺 <b>Regular Videos :</b> {total_reg}\n"
+                        f"  ┠🔒 <b>Encrypted Videos :</b> {total_enc}\n"
+                        f"  ┠📻 <b>Yt Videos :</b> {yt_count}\n"
+                        f"  ┠🧩 <b>ZIP Videos :</b> {total_zip}\n"
+                        f"┠📄 <b>Total PDFs :</b> {total_pdf}\n"
+                        f"  ┠📃 Regular PDFs :</b> {reg_pdf}\n"
+                        f"  ┠🔒 Encrypted PDFs :</b> {enc_pdf}</blockquote>\n\n"
+                        f"<b>🧑‍🏫 Generated By :</b> {user.mention}\n"
+                        f"📅 <b>Generated On :</b> {get_current_time_ist()}"
+            )
+
+            await bot.send_document(UserId, FileTemp, file_name=FileName, caption=File_captions, thumb='Extractor/thumbs/txt-5.jpg')
+            await bot.send_document(ext_logs, FileTemp, file_name=FileName, caption=File_captions, thumb='Extractor/thumbs/txt-5.jpg')
+        except Exception as e:
+            await bot.send_message(UserId, f"🔴 <b>Getting Error :</b> <i>{e}</i>")
+        finally:
+            await emoji.delete()
+            if os.path.exists(FileName):os.remove(FileName)
+            if os.path.exists(FileTemp):os.remove(FileTemp)
+    try:
+        await Editable.delete()
+    except:
+        pass
+
+async def fetchJson(session, url, headers, sempharo):
+    async with sempharo:
+        for attempt in range(1, 4):
+            async with session.get(url, headers=headers) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+                elif resp.status == 429:
+                    logging.warning(f"⚠️ {resp.status} Too Many Requests, Warning 5s...")
+                    await asyncio.sleep(5)
+                else:
+                    logging.error(f"❌ Requests Failed {resp.status} : {url}")
+                    break
+        return {}
+
+async def get_urls_V3(api, BatchId, BatchName, headers1, Editable):
+    resultLines = []
+    sempharo = asyncio.Semaphore(3)
+    async with aiohttp.ClientSession() as session:   
+        SubResp =  await fetchJson(session, f"{api}/get/allsubjectfrmlivecourseclass?courseid={BatchId}&start=-1", headers1, sempharo)
+        subjects = SubResp.get('data', [])
+
+        async def ProcessSubjects(subject):
+            subject_id = subject['subjectid']
+            subject_name = subject.get('subject_name', 'N/A')
+            SubjectLine = []
+
+            try: await Editable.edit(f"<blockquote><b>📥 Extracting Batch : <i>{BatchName}</b>  »»»  {subject_name}</i> </blockquote>") 
+            except Exception as e: pass
+
+            TopicResp = await fetchJson(session, f"{api}/get/alltopicfrmlivecourseclass?courseid={BatchId}&subjectid={subject_id}&start=-1", headers1, sempharo)
+            topics = TopicResp.get('data', [])
+
+            async def ProcessTopics(topic):
+                topic_id = topic['topicid']
+                topic_name = topic.get('topic_name', 'N/A')
+                TopicLines = []
+
+                try: await Editable.edit(f"<blockquote><b>📥 Extracting Batch : <i>{BatchName}</b>  ⪼⪼  {subject_name}  ⪼  {topic_name}</i> </blockquote>")
+                except Exception as e: pass
+
+                VidResp = await fetchJson(session, f"{api}/get/livecourseclassbycoursesubtopconceptapiv3?courseid={BatchId}&subjectid={subject_id}&topicid={topic_id}&start=-1", headers1, sempharo)
+                videos = VidResp.get('data', [])
+                for video in videos:
+                    vid_id =  video['id']
+                    vid_title = video['Title']
+                    ytFlag = video['ytFlag']
+
+                    try:
+                        if video['material_type'] == "VIDEO" and ytFlag != 0 and video.get('file_link'):
+                            vidData = decrypt_data(video['file_link'].split(':')[0])
+                            if "https://" not in vidData:
+                                TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:https://youtu.be/  {vidData}")
+                            else:
+                                TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{vidData}")
+
+                            if video.get('pdf_link'):
+                                raw_pdf = decrypt_data(video['pdf_link'].split(':')[0])
+                                TopicLines.append(
+                                    f"[{subject_name}] ({topic_name}) {vid_title} PDF:{raw_pdf}"
+                                )
+
+
+                                if not video.get('pdf_encryption_key'):
+                                    TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF:{drago_pdf}")
+                                else:
+                                    dec_1 = decrypt_data(video['pdf_encryption_key'].split(':')[0])
+                                    if dec_1 == "abcdefg":
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF:{drago_pdf}")
+                                    else:
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF:{drago_pdf}*{dec_1}")
+
+
+                            if video.get('pdf_link2'):
+                                raw_pdf2 = decrypt_data(video['pdf_link2'].split(':')[0])
+                                drago_pdf2 = build_drago_pdf_url(raw_pdf2, headers1['Authorization'])
+
+                                if not video.get('pdf2_encryption_key'):
+                                    TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF2:{drago_pdf2}")
+                                else:
+                                    dec_2 = decrypt_data(video['pdf2_encryption_key'].split(':')[0])
+                                    if dec_2 == "abcdefg":
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF2:{drago_pdf2}")
+                                    else:
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF2:{drago_pdf2}*{dec_2}")
+
+
+                        elif video['material_type'] == "VIDEO" and ytFlag == 0:
+                            UrlResp = await fetchJson(session, f"{api}/get/fetchVideoDetailsById?course_id={BatchId}&video_id={vid_id}&ytflag=0&folder_wise_course=0&linked_course_id=&lc_app_api_url=", headers1, sempharo)
+                            urls_resp = UrlResp.get('data') or {}
+                            
+                            # ✅ NEW: Build Drago URL instead of Megatron
+                        #    real_video_url = f"{api}/get/fetchVideoDetailsById?course_id={BatchId}&video_id={vid_id}&ytflag=0&folder_wise_course=0"
+                    #        dragourl = build_drago_url(real_video_url, headers1['Authorization'])
+                     #       TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{dragourl}")
+                            # ---- REAL API URL (DO NOT CHANGE) ----
+                            real_video_url = (
+                                f"{api}/get/fetchVideoDetailsById"
+                                f"?course_id={BatchId}"
+                                f"&video_id={vid_id}"
+                                f"&ytflag=0"
+                                f"&folder_wise_course=0"
+                            )
+
+# ---- TXT ONLY URL ----
+                            dragourl = build_drago_url(real_video_url, headers1["Authorization"])
+
+# ---- KEY (optional) ----
+                            enc_key = ""
+
+                            enc_links = urls_resp.get("encrypted_links", [])
+                            if enc_links:
+                                first = enc_links[0]
+                                path_enc = first.get("path")
+                                key_enc = first.get("key")
+
+                                if path_enc and key_enc:
+                                    dec_key = decrypt_data(key_enc.split(":")[0])
+                                    try:
+                                        enc_key = base64.b64decode(dec_key).decode("utf-8")
+                                    except:
+                                        enc_key = ""
+
+                            if enc_key:
+                                TopicLines.append(
+                                    f"[{subject_name}] ({topic_name}) {vid_title}:{dragourl}*{enc_key}"
+                                )
+                            else:
+                                TopicLines.append(
+                                    f"[{subject_name}] ({topic_name}) {vid_title}:{dragourl}"
+                                )
+
+
+
+
+
+                            if urls_resp.get('pdf_link'):
+                            #    p1_url = decrypt_data(urls_resp['pdf_link'].split(':')[0])
+                                real_pdf_api_url = (
+                                    f"{api}/get/fetchVideoDetailsById"
+                                    f"?course_id={BatchId}"
+                                    f"&video_id={vid_id}"
+                                    f"&ytflag=0"
+                                    f"&folder_wise_course=0"
+                                )
+
+                                drago_pdf = build_drago_pdf_url(
+                                    real_pdf_api_url,
+                                    headers1['Authorization']
+                                )
+
+                                if not urls_resp.get('pdf_encryption_key'):
+                                    TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF:{drago_pdf}")
+                                else:
+                                    dec_1 = decrypt_data(urls_resp['pdf_encryption_key'].split(':')[0])
+                                    if dec_1 == "abcdefg":
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF:{drago_pdf}")
+                                    else:
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title} PDF:{drago_pdf}*{dec_1}")
+
+                            if urls_resp.get('pdf_link2'):
+                                p2_url = decrypt_data(urls_resp['pdf_link2'].split(':')[0])
+                                if urls_resp.get('pdf2_encryption_key') is None:
+                                    TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{p2_url}")
+                                else:
+                                    dec_2 = decrypt_data(urls_resp['pdf2_encryption_key'].split(':')[0])
+                                    if dec_2 == "abcdefg":
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{p2_url}")
+                                    else:
+                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{p2_url}*{dec_2}")
+
+                        elif video['material_type'] == "PDF" and video.get('file_link'):
+         #                   pdf_uri = video['file_link'].split(':')[0]
+                            raw_pdf = decrypt_data(video['file_link'].split(':')[0])
+                    #        drago_pdf = build_drago_pdf_url(raw_pdf, headers1['Authorization'])
+                            raw_pdf = decrypt_data(video['file_link'].split(':')[0])
+                            TopicLines.append(
+                                f"[{subject_name}] ({topic_name}) {vid_title}:{raw_pdf}"
+                            )
+
+
+                            if not video.get('pdf_encryption_key'):
+                                TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{drago_pdf}")
+                            else:
+                                dee = decrypt_data(video['pdf_encryption_key'].split(':')[0])
+                                if dee == "abcdefg":
+                                    TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{drago_pdf}")
+                                else:
+                                    TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{drago_pdf}*{dee}")
+                                    
+                    except Exception as e:
+                        logging.warning(f"⚠️ Appx-V3 Fetching Url Failed due to : {str(e)}")
+
+                return TopicLines
+
+            TopicResults = await asyncio.gather(*(ProcessTopics(t) for t in topics))
+            for tr in TopicResults:
+                SubjectLine.extend(tr)
+
+            return SubjectLine
+
+        SubResults = await asyncio.gather(*(ProcessSubjects(s) for s in subjects))
+        for sr in SubResults:
+            resultLines.extend(sr)
+
+    return "\n".join(resultLines)
+
+async def AppxV2_CourseContent(bot, api, UserId, BatchIds, courses, name, headers1, editable2):
+    BatchList = []
+    BatchId = BatchName = BatchThumb = BatchPrice = BatchExp = None
+    BatchList.extend(courses)
+    for idx, BatchId in enumerate(BatchIds, 1):
+        for course in courses:
+            for data in course['coursedt']:      
+                if BatchId == data['id']:
+                    BatchName = data['course_name']
+                    BatchThumb = data['course_thumbnail']
+                    BatchPrice = data.get('price', 'N/A')
+                    BatchExp = data['expiryDate']
+                    break
+
+        if BatchName is None:
+            return await editable2.edit(f"<b>🔴 You Entered the Invalid Batch ID</b>!!!")
+
+        await editable2.edit(f"<blockquote><b>📥 Extracting Batch :</b> <i>{BatchName}</i></blockquote>")
+        PinnedMsg = await bot.pin_chat_message(UserId, editable2.id, both_sides=True)
+        if PinnedMsg: await bot.delete_messages(UserId, PinnedMsg.id)
+        emoji = await bot.send_message(UserId, "👨‍💻") 
+
+        async def fetch_folder_contents(session, api, BatchId, parent_id, headers, prefix_list=None):
+            if prefix_list is None:
+                prefix_list = []
+
+            result = ""
+            async with session.get(f"{api}/get/folder_contentsv2?course_id={BatchId}&parent_id={parent_id}", headers=headers) as resp:
+                folders = (await resp.json()).get('data', {})
+
+                FolderTasks = []
+                for item in folders:
+                    item_id = item['id']
+                    title = item.get('Title', 'N/A')
+                    current_prefix = prefix_list[:1]
+                    prefix_str = f"[{' - '.join(current_prefix)}]" if current_prefix else ""
+
+                    if item['material_type'] == "FOLDER":
+                        FolderTasks.append(fetch_folder_contents(session, api, BatchId, item_id, headers, prefix_list + [title]))
+
+                    else:
+                        try:
+                            if item['material_type'] == "VIDEO" and item['ytFlag'] == 1:
+                                url = decrypt_data(item['file_link'].split(':')[0])
+                                if "https://" not in url:
+                                    result += f"{prefix_str} {title} : https://youtu.be/  {url}\n"
+                                else:
+                                    result += f"{prefix_str} {title} : {url}\n"
+
+                                if item.get('pdf_link'): 
+                                    p1_url = decrypt_data(item['pdf_link'].split(':')[0])
+                                    if item.get('pdf_encryption_key') is None:
+                                        result += f"{prefix_str} {title} PDF : {p1_url}\n"
+                                    else:
+                                        dec_1 = decrypt_data(item['pdf_encryption_key'].split(':')[0])
+                                        if dec_1 == "abcdefg":
+                                            result += f"{prefix_str} {title} PDF : {p1_url}\n"
+                                        else:
+                                            result = f"{prefix_str} {title} PDF : {p1_url}*{dec_1}\n"
+
+                                if item.get('pdf_link2'):
+                                    p2_url = decrypt_data(item['pdf_link2'].split(':')[0])
+                                    if item.get('pdf2_encryption_key') is None:
+                                        result += f"{prefix_str} {title} PDF2 : {p2_url}\n"
+                                    else:
+                                        dec_2 = decrypt_data(item['pdf2_encryption_key'].split(':')[0])
+                                        if dec_2 == "abcdefg":
+                                            result += f"{prefix_str} {title} PDF2 : {p2_url}\n"
+                                        else:
+                                            result += f"{prefix_str} {title} PDF2 : {p2_url}*{dec_2}\n"
+
+                            elif item['material_type'] == "VIDEO" and item['ytFlag'] == 0:
+                                # ✅ NEW: Build Drago URL
+                     #           real_video_url = f"{api}/get/fetchVideoDetailsById?course_id={BatchId}&video_id={item_id}&ytflag=0&folder_wise_course=1"
+                     #           dragourl = build_drago_url(real_video_url, headers['Authorization'])
+                     #           result += f"{prefix_str} {title}:{dragourl}\n"
+                                # ---- REAL API URL ----
+                                real_video_url = (
+                                    f"{api}/get/fetchVideoDetailsById"
+                                    f"?course_id={BatchId}"
+                                    f"&video_id={item_id}"
+                                    f"&ytflag=0"
+                                    f"&folder_wise_course=1"
+                                )
+
+# ---- FETCH FIRST ----
+                                async with session.get(real_video_url, headers=headers) as vidresp:
+                                    videos = (await vidresp.json()).get("data") or {}
+
+# ---- TXT URL ----
+                                dragourl = build_drago_url(real_video_url, headers["Authorization"])
+
+# ---- KEY ----
+                                enc_key = ""
+                                key_raw = videos.get("encryption_key")
+                                if key_raw:
+                                    enc_key = decrypt_data(key_raw.split(":")[0])
+
+# ---- WRITE ----
+                                if enc_key:
+                                    result += f"{prefix_str} {title}:{dragourl}*{enc_key}\n"
+                                else:
+                                    result += f"{prefix_str} {title}:{dragourl}\n"
+
+                                
+                                if videos.get('pdf_link'): 
+                                    p1_url = decrypt_data(videos['pdf_link'].split(':')[0])
+                                    if videos.get('pdf_encryption_key') is None:
+                                        result += f"{prefix_str} {title} PDF : {p1_url}\n"
+                                    else:
+                                        dec_1 = decrypt_data(videos['pdf_encryption_key'].split(':')[0])
+                                        if dec_1 == "abcdefg":
+                                            result += f"{prefix_str} {title} PDF : {p1_url}\n"
+                                        else:
+                                            result += f"{prefix_str} {title} PDF : {p1_url}*{dec_1}\n"
+
+                                if videos.get('pdf_link2'):
+                                    p2_url = decrypt_data(videos['pdf_link2'].split(':')[0])
+                                    if videos.get('pdf2_encryption_key') is None:
+                                        result += f"{prefix_str} {title} PDF2 : {p2_url}\n"
+                                    else:
+                                        dec_2 = decrypt_data(videos['pdf2_encryption_key'].split(':')[0])
+                                        if dec_2 == "abcdefg":
+                                            result += f"{prefix_str} {title} PDF2 : {p2_url}\n"
+                                        else:
+                                            result += f"{prefix_str} {title} PDF2 : {p2_url}*{dec_2}\n"
+
+                            elif item['material_type'] == "PDF":
+                                if item.get('pdf_link'):
+                                    raw_pdf = decrypt_data(item['pdf_link'].split(':')[0])
+                                    drago_pdf = build_drago_pdf_url(raw_pdf, headers['Authorization'])
+
+                                    if not item.get('pdf_encryption_key'):
+                                        result += f"{prefix_str}{title}: {drago_pdf}\n"
+                                    else:
+                                        pdf_key = decrypt_data(item['pdf_encryption_key'].split(':')[0])
+                                        if pdf_key == "abcdefg":
+                                            result += f"{prefix_str}{title}: {drago_pdf}\n"
+                                        else:
+                                            result += f"{prefix_str}{title}: {drago_pdf}*{pdf_key}\n"
+        
+                        except Exception as e:
+                            logging.warning(f"⚠️ Getting File Data failed. Skipping this ! {e}")
+                            pass
+                if FolderTasks:
+                    SubResults = await asyncio.gather(*(FolderTasks))
+                    for r in SubResults:
+                        result += r
+            return result
+
+        result = ""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{api}/get/folder_contentsv2?course_id={BatchId}&parent_id=-1&windowsapp=false", headers=headers1) as resp:
+                parents = (await resp.json()).get('data', {})
+                for parent in parents:
+                    parent_id = parent['id']
+                    result += await fetch_folder_contents(session, api, BatchId, parent_id, headers1)
+
+        FileName = BatchName.replace("/", "-").replace("|", " ").replace("_", " ") + '.txt'
+        FileTemp = BatchName.replace("/", " ").replace("|", "").replace("_", " ") + ".txt"
+        unique_lines = []
+        seen = set()
+        for line in result.splitlines():
+            if line not in seen:
+                unique_lines.append(line)
+                seen.add(line)
+        with open(FileTemp, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(unique_lines).rstrip('\n'))
+
+        total_urls = sum(1 for line in unique_lines if "https://" in line)
+        reg_mp4_count = sum(1 for line in unique_lines if ".mp4" in line)
+        reg_m3u8_count = sum(1 for line in unique_lines if ".m3u8" in line)
+        total_reg = reg_mp4_count + reg_m3u8_count
+        total_enc = sum(1 for line in unique_lines if "encrypted.m" in line)
+        total_zip = sum(1 for line in unique_lines if ".zip" in line)
+        yt_count = sum(1 for line in unique_lines if "https://youtu.be  " in line)
+        ApisVid = sum(1 for line in unique_lines if "/appx/v2/" in line)
+        total_vid = total_zip + total_enc + total_reg + yt_count + ApisVid
+        reg_pdf = sum(1 for line in unique_lines if ".pdf" in line and "*" not in line)
+        enc_pdf = sum(1 for line in unique_lines if ".pdf" in line and "*" in line)
+        total_pdf = reg_pdf + enc_pdf
+
+        user = await bot.get_users(UserId)
+        File_captions = (
+            f"<blockquote><b>📱 App Name: {name} (V2)</b>\n"
+            f"<b>🔗 API :</b> {api} </blockquote>\n\n"
+            f"<b>======= BATCH DETAILS =======</b>\n"
+            f"<blockquote expandable>🪪 <b>Batch ID :</b> {BatchId}\n"
+            f"🌟 <b>Batch Name :</b> {BatchName}\n"
+            f"💸 <b>Batch Price :</b> {BatchPrice}₹\n"
+            f"⌛ <b>Expiry Date :</b> {BatchExp}\n"
+            f"🖼️ <b>Batch Thumbnail :</b> [Thumbnail]({BatchThumb})</blockquote>\n\n"
+            f"<b>======= LINK SUMMARY =======</b>\n"
+            f"<blockquote expandable>🔢 <b>Total Number of Links :</b> {total_urls}\n"
+            f"┠🎥 <b>Total Videos :</b> {total_vid}\n"
+            f"  ┠📺 <b>Regular Videos :</b> {total_reg}\n"
+            f"  ┠📹 <b>YouTube Videos :</b> {yt_count}\n"
+            f"  ┠🔒 <b>Encrypted Videos :</b> {total_enc}\n"
+            f"  ┠🧩 <b>ZIP Videos :</b> {total_zip}\n"
+            f"┠📄 <b>Total PDFs :</b> {total_pdf}\n"
+            f"  ┠📃 Regular PDFs :</b> {reg_pdf}\n"
+            f"  ┠🔒 Encrypted PDFs :</b> {enc_pdf}</blockquote>\n\n"
+            f"🧑‍🏫 <b>Generated By :</b> {user.mention}\n"
+            f"📅 <b>Generated On :</b> {get_current_time_ist()}"
+        )
+
+        try:
+            await bot.send_document(UserId, FileTemp, file_name=FileName, caption=File_captions, thumb='Extractor/thumbs/txt-5.jpg')
+            await bot.send_document(ext_logs, FileTemp, file_name=FileName, caption=File_captions, thumb='Extractor/thumbs/txt-5.jpg')
+        except Exception as e:
+            await bot.send_message(UserId, f'⚠️ <b>An Error Occured :</b> <i>{e}</i>')
+        finally:
+            await emoji.delete()
+            if os.path.exists(FileTemp):os.remove(FileTemp)
+            if os.path.exists(FileName): os.remove(FileName)
+    await editable2.delete()
+
+@app.on_message(filters.command(["appxnew"]))
+async def appx_new_command(bot, message):
+    UserId = message.chat.id
+
+    api_msg = await bot.ask(
+        UserId,
+        "<b>🔗 Send Appx API URL</b>\n\nExample:\n<code>https://tcsexamzoneapi.classx.co.in  </code>"
+    )
+    api = api_msg.text.strip()
+
+    if not api.startswith("http"):
+        return await bot.send_message(UserId, "❌ Invalid API URL")
+
+    app_name = (
+        api.replace("https://", "")
+           .replace("http://", "")
+           .split(".")[0]
+           .replace("api", "")
+           .title()
+    )
+
+    try:
+        await AppxMerged(bot, UserId, api, app_name)
+    except Exception as e:
+        await bot.send_message(
+            UserId,
+            f"❌ <b>AppxNew Error:</b>\n<code>{e}</code>"
+        )
