@@ -16,14 +16,14 @@ BOT_TEXT = "bot_text"
 OWNER_ID = int(os.environ.get("OWNER_ID", "7566796700"))
 # ------------------------------------------------
 # //LOG CHANNEL ID 
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003887045145"))
+CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1003602281977"))
 
 # //FORCE_CHANNEL_ID
 CHANNEL_ID2 = int(os.environ.get("CHANNEL_ID2", "-1003887045145")) 
 # ------------------------------------------------
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb+srv://sujalbot:sujalbot@cluster0.mnjoqfu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 # -----------------------------------------------
-PREMIUM_LOGS = int(os.environ.get("PREMIUM_LOGS", "-1003887045145"))
+PREMIUM_LOGS = int(os.environ.get("PREMIUM_LOGS", "-1003602281977"))
 # -----------------------------------------------
 join = '<a href="https://t.me/imxTaR">✳️ JOIN BACKUP</a>'
 # -----------------------------------------------
