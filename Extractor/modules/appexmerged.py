@@ -18,13 +18,21 @@ THREADPOOL = ThreadPoolExecutor(max_workers=1000)
 
 ext_logs = PREMIUM_LOGS
 
+def get_ext_from_url(url: str) -> str:
+    u = (url or "").lower()
+    if ".mkv" in u: return "mkv"
+    if ".m3u8" in u: return "m3u8"
+    if ".mpd" in u:  return "mpd"
+    if ".mp4" in u:  return "mp4"
+    return "m3u8"
+
 
 import base64
 from datetime import datetime
 import pytz
 
 
-def build_drago_url(real_url: str, auth_token: str, ext="mkv") -> str:
+def build_drago_url(real_url: str, auth_token: str, ext="m3u8") -> str:
     try:
         url_hex = real_url.encode("utf-8").hex()
 
@@ -145,6 +153,9 @@ async def Appx_Merged_Login(bot, UserId, api):
 
 
 async def AppxMerged(bot, UserId, api, app_name):
+    Courses1 = []   # ✅ ADD
+    Courses2 = []   # ✅ ADD
+    
     token, userid, log_info = await Appx_Merged_Login(bot, UserId, api)
     headers1 = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0", "Accept": "*/*", "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "gzip, deflate, br, zstd", "Host": api.replace('https://', ''), "Client-Service": "Appx", "Auth-Key": "appxapi", "source": "website", "User-ID": userid, "Device-Type":"", "Authorization": token, "Connection": "keep-alive", "TE": "trailers"}
 
@@ -491,7 +502,9 @@ async def get_urls_V3(api, BatchId, BatchName, headers1, Editable):
                                     f"&folder_wise_course=0"
                                 )
 
-                                dragon_url = build_drago_url(real_api_url, headers1["Authorization"])
+                                ext = get_ext_from_url(real_media_url)   # real_media_url already decrypted path hai
+                                dragon_url = build_drago_url(real_api_url, headers1["Authorization"], ext=ext)
+
 
 
                                 if real_key:
@@ -536,17 +549,39 @@ async def get_urls_V3(api, BatchId, BatchName, headers1, Editable):
 
                             if urls_resp.get('pdf_link2'):
                                 p2_url = decrypt_data(urls_resp['pdf_link2'].split(':')[0])
-                                if urls_resp.get('pdf2_encryption_key') is None:
-                                    TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{p2_url}")
-                                else:
-                                    dec_2 = decrypt_data(urls_resp['pdf2_encryption_key'].split(':')[0])
-                                    if dec_2 == "abcdefg":
-                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{p2_url}")
-                                    else:
-                                        TopicLines.append(f"[{subject_name}] ({topic_name}) {vid_title}:{p2_url}*{dec_2}")
+                                # ✅ PDF-2 via Drago (ytFlag == 0, V3)
+                                if urls_resp.get("pdf_link2"):
+                                    pdf2_key = ""
+                                    if urls_resp.get("pdf2_encryption_key"):
+                                        pdf2_key = decrypt_data(urls_resp["pdf2_encryption_key"].split(":")[0])
 
-        #                elif video['material_type'] == "PDF" and video.get('file_link'):
-                        elif video['material_type'] == "PDF":
+                                    pdf2_api_url = (
+                                        f"{api}/get/fetchVideoDetailsById"
+                                        f"?course_id={BatchId}"
+                                        f"&video_id={vid_id}"
+                                        f"&ytflag=0"
+                                        f"&folder_wise_course=1"
+                                    )
+
+                                    drago_pdf2 = build_drago_url(
+                                        pdf2_api_url,
+                                        headers1["Authorization"],
+                                        ext="pdf"
+                                    )
+
+                                    if pdf2_key and pdf2_key != "abcdefg":
+                                        TopicLines.append(
+                                            f"[{subject_name}] ({topic_name}) {vid_title} (PDF-2):{drago_pdf2}*{pdf2_key}"
+                                        )
+                                    else:
+                                        TopicLines.append(
+                                            f"[{subject_name}] ({topic_name}) {vid_title} (PDF-2):{drago_pdf2}"
+                                        )
+
+        
+
+                        elif video['material_type'] == "PDF" and video.get('file_link'):
+         #               elif video['material_type'] == "PDF":
                             pdf_key = ""
                             if video.get('pdf_encryption_key'):
                                 pdf_key = decrypt_data(video['pdf_encryption_key'].split(':')[0])
@@ -556,7 +591,8 @@ async def get_urls_V3(api, BatchId, BatchName, headers1, Editable):
                                 f"?course_id={BatchId}"
                                 f"&video_id={vid_id}"
                                 f"&ytflag={ytFlag}"
-                                f"&folder_wise_course=0"
+                 #               f"&folder_wise_course=0"
+                                f"&folder_wise_course=1"
                             )
 
                             drago_pdf = build_drago_url(
@@ -695,7 +731,10 @@ async def AppxV2_CourseContent(bot, api, UserId, BatchIds, courses, name, header
                                         f"&folder_wise_course=1"
                                     )
 
-                                    dragon_url = build_drago_url(real_api_url, headers["Authorization"])
+                                    ext = get_ext_from_url(real_media_url)
+                                    dragon_url = build_drago_url(real_api_url, headers["Authorization"], ext=ext)
+
+
 
                                     if real_key:
                                         result += f"{prefix_str} {title}:{dragon_url}*{real_key}\n"
